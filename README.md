@@ -11,6 +11,7 @@ $ ustrukturyzuj --pomóż(((
 Options:
     -k, --katalog ~/nieposortowane-zdjęcia
                         Katalog na którym będziem pracować(domyślnie ".")
+    -r, --rekureku      rekurencyjnie zaglębiaj się w podkatalogi
     -p, --pomóż(((      wypisz ten tekst
 $ ./ustrukturyzuj
 ```
@@ -23,7 +24,7 @@ $ ./ustrukturyzuj
             * IMG_025
             * ... 
             * IMG_326
-     * ...
+    * ...
         
 ### DOZRO
  * _odśmiecenie kodu_

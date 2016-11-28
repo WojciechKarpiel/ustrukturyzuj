@@ -17,7 +17,7 @@ struct Opcje {
 }
 
 enum AnyError {
-    SystemTimeError,
+    SystemTimeError(String),
     IoError,
 }
 
@@ -29,53 +29,68 @@ impl From<std::io::Error> for AnyError {
 }
 
 impl std::convert::From<std::time::SystemTimeError> for AnyError {
-    fn from(_: std::time::SystemTimeError) -> Self {
-        AnyError::SystemTimeError
+    fn  from(error: std::time::SystemTimeError) -> Self {
+        AnyError::SystemTimeError(error.description().to_owned())
     }
 }
 
+
+
 fn main() {
+
     let Opcje { katalog: katalog, recursive: rekurencyjnie } = parse_arguments();
     println!("katalog {:?}", katalog.as_path().canonicalize());
     let res: std::io::Result<fs::ReadDir> = fs::read_dir(katalog);
-    match do_the_job(res.unwrap(), rekurencyjnie) {
+    match do_the_job(res, rekurencyjnie) {
         Ok(()) => println!("SKPOX"),
         _ => println!("NIE UDALS")
     };
 }
 
-fn do_the_job(read_dir: fs::ReadDir, reku: bool) -> Result<(), AnyError> {
-    println!("rekurencyjny? {}", reku);
+
+fn do_the_job(read_dir:std::io::Result<fs::ReadDir> , reku: bool) -> Result<(),  AnyError> {
+    let read_dir = read_dir?;
     for dir_entry in read_dir {
         let dir_entry: fs::DirEntry = dir_entry?;
         let file_type: fs::FileType = dir_entry.file_type()?;
         if file_type.is_dir() {
-            println!("{:?} - folder", dir_entry.file_name())
-        } else if file_type.is_symlink() {
-            println!("{:?} - symlink", dir_entry.file_name())
+            println!("{:?} - folder", dir_entry.file_name());
+            if reku {
+                println!("REKU");
+               do_the_job(  fs::read_dir(dir_entry.path()), reku);
+            }
         } else if file_type.is_file() {
-            println!("{:?} - file", dir_entry.file_name());
-            let file: fs::DirEntry = dir_entry;
-            let metadata: fs::Metadata = file.metadata()?; //todo: wyrzucić do osobnej funkcji żeby TRY! nie kończyło programu
-            let system_time: std::time::SystemTime = metadata.created()
-                .or(metadata.modified())
-                .or(metadata.accessed())?;
-            //u mmnie w systemie nie ma created, trzeba będzie to ogarnąć w kodzie i iść do accessed jak nie ma
-            println!("{:?}", system_time.elapsed().unwrap()); //ile do teraz
-            let duration = chrono::Duration::from_std(system_time.elapsed()?);
-            let now: chrono::DateTime<chrono::Local> = chrono::Local::now();
-            let data: chrono::DateTime<chrono::Local> = now.sub(duration.unwrap());
-            println!("{}", data); //DZIAŁA :DDDDDDDDDDDDDDDD
-            let dirname = date_to_dirname(data);
-            println!("{:?}", &dirname);
-            //todo sprawdzić czy właśnie nie jesteśmy w takim folderze
-            let newf: path::PathBuf = file.path().as_path().parent().unwrap().join(dirname);
-//            println!("{:?}", &newf);
-             fs::create_dir_all(&newf)?;
-            fs::rename(file.path(), newf.as_path().join(file.file_name()))?;
-        }
+            handle_single_file(dir_entry);
+        } //else is symlink- ignore
     }
     Result::Ok(())
+}
+
+fn handle_single_file(file: fs::DirEntry) ->Result<(),  AnyError> {
+    println!("{:?} - file", file.file_name());
+    let metadata: fs::Metadata = file.metadata()?; //todo: wyrzucić do osobnej funkcji żeby TRY! nie kończyło programu
+    let system_time: std::time::SystemTime = metadata.created()
+        .or(metadata.modified())
+        .or(metadata.accessed())?;
+    //u mmnie w systemie nie ma created, trzeba będzie to ogarnąć w kodzie i iść do accessed jak nie ma
+    println!("{:?}", system_time.elapsed().unwrap()); //ile do teraz
+    let duration = chrono::Duration::from_std(system_time.elapsed()?);
+    let now: chrono::DateTime<chrono::Local> = chrono::Local::now();
+    let data: chrono::DateTime<chrono::Local> = now.sub(duration.unwrap());
+    let dirname = date_to_dirname(data);
+
+    let path= file.path();
+    let path:  &path::Path = path.as_path();
+    if !path.parent().unwrap().ends_with(&dirname) {
+
+        let newf: path::PathBuf = path.parent().unwrap().join(dirname);
+        //            println!("{:?}", &newf);
+        fs::create_dir_all(&newf)?;
+        fs::rename(file.path(), newf.as_path().join(file.file_name()))?;
+    }else{
+        println!("JEST JUŻ W DOBRUM FOLDERZE ");
+    }
+    Ok(())
 }
 
 fn date_to_dirname(data: LocalDate) -> path::PathBuf{
@@ -92,7 +107,7 @@ fn parse_arguments() -> Opcje {
 
     let mut opts = Options::new();
     opts.optopt("k", "katalog", "Katalog na którym będziem pracować(domyślnie \".\")", "~/nieposortowane-zdjęcia");
-    opts.optflag("r", "rekureku", "rekurencyjnie zaglębiaj się w katalogi (jeszcze niezrobione)");
+    opts.optflag("r", "rekureku", "rekurencyjnie zaglębiaj się w podkatalogi");
     opts.optflag("p", "pomóż(((", "wypisz ten tekst");
 
     let matches = match opts.parse(&args[1..]) {
