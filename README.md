@@ -27,9 +27,8 @@ $ ./ustrukturyzuj
     * ...
         
 ### DOZRO
- * _odśmiecenie kodu_
+ * sprawdzanie czy nie nadpisuje plików
  * obsługa błędów
- * rekurencyjne zagłebianie się w podkatalogi
  * rozdzielanie względem przedziału czasu innym niż dzień
  * możliwość zmiany wyglądu daty w nazwie folderu
  * rozdzielanie plików nie tylko po dacie (np po regekspie nazwy)
