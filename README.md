@@ -16,15 +16,15 @@ Options:
 $ ./ustrukturyzuj
 ```
 * zdjęcia
-    * 1994-07-01
+     * 1994-07-01
             * IMG_001
             * ... 
             * IMG_024
-    * 1994-07-02
+     * 1994-07-02
             * IMG_025
             * ... 
             * IMG_326
-    * ...
+     * ...
         
 ### DOZRO
  * sprawdzanie czy nie nadpisuje plików
