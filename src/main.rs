@@ -7,33 +7,37 @@ use std::fs;
 use std::path;
 use std::ops::Sub;
 use chrono::Datelike;
+use std::io;
+use std::io::Write;
 
 type LocalDate = chrono::DateTime<chrono::Local>;
 
 struct ProgramParameters {
     directory: path::PathBuf,
     recursive: bool,
+    warn_on_override: bool,
 }
 
 fn main() {
-    let ProgramParameters { directory, recursive } = parse_arguments();
-    structuralize_directory(fs::read_dir(directory), recursive).unwrap();
+    let ProgramParameters { directory, recursive, warn_on_override } = parse_arguments();
+    structuralize_directory(fs::read_dir(directory), recursive, warn_on_override).unwrap();
 }
 
-fn structuralize_directory(read_dir: std::io::Result<fs::ReadDir>, recursive: bool) -> std::result::Result<(), std::io::Error> {
+fn structuralize_directory(read_dir: std::io::Result<fs::ReadDir>, recursive: bool, warn_on_override: bool)
+                           -> std::result::Result<(), std::io::Error> {
     for dir_entry in read_dir.unwrap() {
         let dir_entry: fs::DirEntry = dir_entry.unwrap();
         let file_type: fs::FileType = dir_entry.file_type().unwrap();
         if file_type.is_dir() && recursive {
-            structuralize_directory(fs::read_dir(dir_entry.path()), recursive).unwrap(); //todo jak niżej
+            structuralize_directory(fs::read_dir(dir_entry.path()), recursive, warn_on_override).unwrap(); //todo jak niżej
         } else if file_type.is_file() {
-            handle_single_file(dir_entry).unwrap(); //todo jak się jeden ne uda to nic się nie stanie
+            handle_single_file(dir_entry, warn_on_override).unwrap(); //todo jak się jeden ne uda to nic się nie stanie
         } //w przeciwnym wypadku jest sznurkiem
     }
     Result::Ok(())
 }
 
-fn handle_single_file(file: fs::DirEntry) -> Result<(), std::io::Error> {
+fn handle_single_file(file: fs::DirEntry, warn_on_override: bool) -> Result<(), std::io::Error> {
     let metadata: fs::Metadata = file.metadata().unwrap();
     let creation_time: std::time::SystemTime = metadata.created()
         .or(metadata.modified())
@@ -48,7 +52,13 @@ fn handle_single_file(file: fs::DirEntry) -> Result<(), std::io::Error> {
     if !path.parent().unwrap().ends_with(&new_dir_name) {
         let new_dir_path: path::PathBuf = path.parent().unwrap().join(new_dir_name);
         fs::create_dir_all(&new_dir_path)?;
-        fs::rename(file.path(), new_dir_path.as_path().join(file.file_name()))?;
+        let new_file_path: path::PathBuf = new_dir_path.as_path().join(file.file_name());
+        if warn_on_override && new_file_path.as_path().exists() {
+            if !got_permission(new_file_path.as_path()) {
+                return Ok(());
+            }
+        }
+        fs::rename(file.path(), new_file_path)?;
     }
     Ok(())
 }
@@ -66,6 +76,7 @@ fn parse_arguments() -> ProgramParameters {
     let mut opts = Options::new();
     opts.optopt("k", "katalog", "Katalog na którym będziem pracować(domyślnie \".\")", "~/nieposortowane-zdjęcia");
     opts.optflag("r", "rekureku", "rekurencyjnie zaglębiaj się w podkatalogi");
+    opts.optflag("u", "uważaj", "ostrzegaj przed nadpisaniem pliku");
     opts.optflag("p", "pomóż(((", "wypisz ten tekst");
 
     let matches = opts.parse(&args[1..]).unwrap();
@@ -74,10 +85,26 @@ fn parse_arguments() -> ProgramParameters {
         print_help_and_exit(&program_name, opts)
     }
     let recursive = matches.opt_present("r");
+    let warn_on_override = matches.opt_present("u");
     let path_to_directory: String = matches.opt_str("k").unwrap_or(".".to_string());
     ProgramParameters {
         directory: path::PathBuf::from(path_to_directory),
-        recursive: recursive
+        recursive: recursive,
+        warn_on_override: warn_on_override,
+    }
+}
+
+fn got_permission(path: &path::Path) -> bool {
+    loop {
+        print!("Plik {} już istnieje! Nadpisać? [t/n] ", path.display());
+        io::stdout().flush().unwrap(); //lines migh be buffered
+        let mut answer = String::new();
+        io::stdin().read_line(&mut answer).unwrap();
+        match answer.trim().to_uppercase().as_str() {
+            "T" => return true,
+            "N" => return false,
+            _ => continue,
+        };
     }
 }
 
