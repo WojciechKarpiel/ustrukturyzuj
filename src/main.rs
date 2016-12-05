@@ -9,6 +9,7 @@ use std::ops::Sub;
 use chrono::Datelike;
 use std::io;
 use std::io::Write;
+use std::error::Error;
 
 type LocalDate = chrono::DateTime<chrono::Local>;
 
@@ -29,15 +30,21 @@ fn structuralize_directory(read_dir: std::io::Result<fs::ReadDir>, recursive: bo
         let dir_entry: fs::DirEntry = dir_entry.unwrap();
         let file_type: fs::FileType = dir_entry.file_type().unwrap();
         if file_type.is_dir() && recursive {
-            structuralize_directory(fs::read_dir(dir_entry.path()), recursive, warn_on_override).unwrap(); //todo jak niżej
+            structuralize_directory(fs::read_dir(dir_entry.path()), recursive, warn_on_override)
+                .unwrap_or_else(|err: io::Error|
+                    write!(&mut io::stderr(), "Nie udało się ogarnąć katalogu \"{}\": {}",
+                           &dir_entry.path().as_path().display(), err.description()).unwrap());
         } else if file_type.is_file() {
-            handle_single_file(dir_entry, warn_on_override).unwrap(); //todo jak się jeden ne uda to nic się nie stanie
+            handle_single_file(&dir_entry, warn_on_override)
+                .unwrap_or_else(|err: io::Error|
+                    write!(&mut io::stderr(), "Nie udało się ogarnąć pliku \"{}\": {}",
+                           &dir_entry.path().as_path().display(), err.description()).unwrap());
         } //w przeciwnym wypadku jest sznurkiem
     }
     Result::Ok(())
 }
 
-fn handle_single_file(file: fs::DirEntry, warn_on_override: bool) -> Result<(), std::io::Error> {
+fn handle_single_file(file: &fs::DirEntry, warn_on_override: bool) -> Result<(), std::io::Error> {
     let metadata: fs::Metadata = file.metadata().unwrap();
     let creation_time: std::time::SystemTime = metadata.created()
         .or(metadata.modified())
